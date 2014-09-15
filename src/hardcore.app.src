@@ -1,0 +1,12 @@
+{application, hardcore,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { hardcore_app, []}},
+  {env, []}
+ ]}.
