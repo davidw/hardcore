@@ -43,7 +43,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 add_handler() ->
-    gen_event:add_handler(?SERVER, ?MODULE, []).
+    gen_event:add_handler(hardcore, ?SERVER, []).
 
 %%%===================================================================
 %%% gen_event callbacks
@@ -59,6 +59,7 @@ add_handler() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
+    error_logger:add_report_handler(?SERVER),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -74,8 +75,26 @@ init([]) ->
 %%                          remove_handler
 %% @end
 %%--------------------------------------------------------------------
+
+handle_event({info_report, _Pid1,
+              {_Pid2, progress,
+               [{application, AppName},
+                {started_at, _NodeName}]}}, State) ->
+    lager:info("hardcore_events application started: ~p", [AppName]),
+    hardcore_server:app_started(AppName),
+    {ok, State};
+
+handle_event({info_report, _Pid1, {_Pid2, std_info,
+                                   [{application,AppName},
+                                    {exited, Reason},
+                                    % We only manage temporary applications.
+                                    {type, temporary}]}}, State) ->
+    lager:info("hardcore_events application stopped: ~p ~p", [AppName, Reason]),
+    hardcore_server:app_stopped(AppName, Reason),
+    {ok, State};
+
 handle_event(Event, State) ->
-    io:format("handle_event EVENT ~p STATE ~p~n", [Event, State]),
+    lager:info("hardcore_events unhandled: ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -91,10 +110,10 @@ handle_event(Event, State) ->
 %%                   {remove_handler, Reply}
 %% @end
 %%--------------------------------------------------------------------
-handle_call(Request, State) ->
-    io:format("handle_call REQUEST ~p STATE ~p~n", [Request, State]),
+
+handle_call(_Request, State) ->
     Reply = ok,
-    {ok, Reply, State}.
+    {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -109,9 +128,9 @@ handle_call(Request, State) ->
 %%                         remove_handler
 %% @end
 %%--------------------------------------------------------------------
-handle_info(Info, State) ->
-    io:format("handle_info INFO ~p STATE ~p~n", [Info, State]),
-    {ok, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private

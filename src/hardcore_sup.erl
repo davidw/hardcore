@@ -16,7 +16,7 @@
 %% ===================================================================
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Events]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -24,5 +24,6 @@ start_link() ->
 
 init([]) ->
     Events = ?CHILD(hardcore_events, worker),
-    {ok, { {one_for_one, 5, 10}, [Events]} }.
+    Server = ?CHILD(hardcore_server, worker),
+    {ok, { {one_for_one, 100, 100}, [Server, Events]} }.
 
