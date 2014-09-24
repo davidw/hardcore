@@ -10,7 +10,10 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    hardcore_sup:start_link().
+    Res = hardcore_sup:start_link(),
+    {ok, StartApps} = application:get_env(hardcore, apps),
+    [hardcore:start(App) || App <- StartApps],
+    Res.
 
 stop(_State) ->
     ok.

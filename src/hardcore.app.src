@@ -1,6 +1,6 @@
 {application, hardcore,
  [
-  {description, ""},
+  {description, "Manage and restart applications"},
   {vsn, "1"},
   {registered, []},
   {applications, [
