@@ -4,14 +4,14 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 24 Sep 2014 by David N. Welton <davidw@dedasys.com>
+%%% Created : 31 Oct 2014 by David N. Welton <davidw@dedasys.com>
 %%%-------------------------------------------------------------------
--module(hardcore_server).
+-module(hardcore_backoff_server).
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, app_started/1, app_stopped/2, running/0, managed/0]).
+-export([start_link/0, app_stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -19,27 +19,13 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {
-          stop_callbacks,
-          managed_apps,
-          running_apps
-         }).
+-define(MAX_RESTART_SECONDS, 100).
+
+-record(state, {restart_waits::list()}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-app_started(AppName) ->
-    gen_server:cast(?SERVER, {app_started, AppName}).
-
-app_stopped(AppName, Reason) ->
-    gen_server:cast(?SERVER, {app_stopped, AppName, Reason}).
-
-running() ->
-    gen_server:call(?SERVER, running).
-
-managed() ->
-    gen_server:call(?SERVER, managed).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -51,6 +37,8 @@ managed() ->
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+app_stop(AppName) ->
+    gen_server:cast(?SERVER, {app_stop, AppName}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -67,8 +55,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{managed_apps = sets:new(),
-                running_apps = sets:new()}}.
+    {ok, #state{restart_waits = []}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -84,36 +71,9 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start, AppName, StopCallback}, From, State) ->
-    %% Don't actually start it, we first want to register it as
-    %% something to listen in on, in case it crashes right away.
-    gen_server:cast(?SERVER, {start_application, AppName, From}),
-    {noreply, add_app_managed(AppName, State)};
-
-handle_call({stop, AppName}, _From, State) ->
-    Res = application:stop(AppName),
-    NewState = apply_funs_to_state(AppName, State,
-                                   [fun remove_app_managed/2,
-                                    fun remove_app_running/2]),
-
-    {reply, {Res, result_proplist(NewState)}, NewState};
-
-%% In this case it's already running or we return an error.
-handle_call({manage, AppName, StopCallback}, _From, State) ->
-    case lists:keyfind(AppName, 1, application:which_applications()) of
-        false ->
-            {reply, {error, not_running, AppName}, State};
-        _ ->
-            NewState = apply_funs_to_state(AppName, State,
-                                           [fun add_app_running/2,
-                                            fun add_app_managed/2]),
-            {reply, result_proplist(State), NewState}
-    end;
-
-handle_call(running, _From, State) ->
-    {reply, sets:to_list(State#state.running_apps), State};
-handle_call(managed, _From, State) ->
-    {reply, sets:to_list(State#state.managed_apps), State}.
+handle_call(_Request, _From, State) ->
+    Reply = ok,
+    {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -126,33 +86,23 @@ handle_call(managed, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({start_application, AppName, From}, State) ->
-    case application:ensure_all_started(AppName, temporary) of
-        ok ->
-            gen_server:reply(From, {ok, result_proplist(State)}),
-            {noreply, State};
-        Err ->
-            gen_server:reply(From, {Err, result_proplist(State)}),
-            {noreply, remove_app_running(AppName, State)}
-    end;
+handle_cast({restart, AppName}, State) ->
+    hardcore:start(AppName),
+    {noreply, State};
 
-handle_cast({app_started, AppName}, State) ->
-    case sets:is_element(AppName, State#state.managed_apps) of
-        true ->
-            {noreply, add_app_running(AppName, State)};
-        _ ->
-            {noreply, State}
-    end;
-
-handle_cast({app_stopped, AppName, _Reason}, State) ->
-    case sets:is_element(AppName, State#state.managed_apps) of
-        true ->
-            {M, F, A} = proplists:get_value(AppName, State#state.stop_callbacks),
-            catch(M:F([AppName] ++ A)),
-            {noreply, remove_app_running(AppName, State)};
-        _ ->
-            {noreply, State}
-    end.
+handle_cast({app_stop, AppName}, State) ->
+    case proplists:get_value(AppName, State#state.restart_waits) of
+        undefined ->
+            RestartIn = 1,
+            RestartTime = 1;
+        RestartTime ->
+            RestartIn = lists:min([RestartTime * 2, ?MAX_RESTART_SECONDS])
+    end,
+    timer:apply_after(RestartTime * 1000,
+                      gen_server, cast,
+                      [?SERVER, {restart, AppName}]),
+    NewRestartWaits = proplists:delete(AppName, State#state.restart_waits) ++ [{AppName, RestartIn}],
+    {noreply, State#state{restart_waits = NewRestartWaits}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -195,27 +145,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-remove_app_running(AppName, State) ->
-    NewApps = sets:del_element(AppName, State#state.running_apps),
-    State#state{running_apps = NewApps}.
-
-remove_app_managed(AppName, State) ->
-    NewApps = sets:del_element(AppName, State#state.managed_apps),
-    State#state{managed_apps = NewApps}.
-
-add_app_managed(AppName, State) ->
-    NewApps = sets:add_element(AppName, State#state.managed_apps),
-    State#state{managed_apps = NewApps}.
-
-add_app_running(AppName, State) ->
-    NewApps = sets:add_element(AppName, State#state.running_apps),
-    State#state{running_apps = NewApps}.
-
-result_proplist(State) ->
-    [{managed, sets:to_list(State#state.managed_apps)},
-     {running, sets:to_list(State#state.running_apps)}].
-
-apply_funs_to_state(AppName, State, Funs) ->
-    lists:foldl(fun(F, S) -> F(AppName, S) end, State, Funs).
