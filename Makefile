@@ -1,3 +1,6 @@
+all:
+	rebar compile
+
 dialyzer: build.plt
 	dialyzer -nn --plt $< ebin
 
