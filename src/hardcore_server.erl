@@ -20,9 +20,9 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-          stop_callbacks,
-          managed_apps,
-          running_apps
+          stop_callbacks::list(),
+          managed_apps::sets:set(),
+          running_apps::sets:set()
          }).
 
 %%%===================================================================
@@ -85,11 +85,14 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({start, AppName, StopCallback}, From, State) ->
-    %% Don't actually start it, we first want to register it as
+    %% Don't actually start it: we first want to register it as
     %% something to listen in on, in case it crashes right away.
     gen_server:cast(?SERVER, {start_application, AppName, From}),
-    {noreply, add_app_managed(AppName, State)};
+    NewStopCallbacks = proplists:delete(AppName, State#state.stop_callbacks) ++
+        [{AppName, StopCallback}],
+    {noreply, add_app_managed(AppName, State#state{stop_callbacks = NewStopCallbacks})};
 
+%% Stop it and stop listening in on it.
 handle_call({stop, AppName}, _From, State) ->
     Res = application:stop(AppName),
     NewState = apply_funs_to_state(AppName, State,
@@ -104,10 +107,12 @@ handle_call({manage, AppName, StopCallback}, _From, State) ->
         false ->
             {reply, {error, not_running, AppName}, State};
         _ ->
+            NewStopCallbacks = proplists:delete(AppName, State#state.stop_callbacks) ++
+                [{AppName, StopCallback}],
             NewState = apply_funs_to_state(AppName, State,
                                            [fun add_app_running/2,
                                             fun add_app_managed/2]),
-            {reply, result_proplist(State), NewState}
+            {reply, result_proplist(State), NewState#state{stop_callbacks = NewStopCallbacks}}
     end;
 
 handle_call(running, _From, State) ->
@@ -136,6 +141,8 @@ handle_cast({start_application, AppName, From}, State) ->
             {noreply, remove_app_running(AppName, State)}
     end;
 
+%% This comes from hardcore_events when it notices that the
+%% application has started.
 handle_cast({app_started, AppName}, State) ->
     case sets:is_element(AppName, State#state.managed_apps) of
         true ->
@@ -144,6 +151,8 @@ handle_cast({app_started, AppName}, State) ->
             {noreply, State}
     end;
 
+%% This comes from hardcore_events when it notices that the
+%% application has stopped.
 handle_cast({app_stopped, AppName, _Reason}, State) ->
     case sets:is_element(AppName, State#state.managed_apps) of
         true ->
@@ -195,7 +204,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 remove_app_running(AppName, State) ->
     NewApps = sets:del_element(AppName, State#state.running_apps),
