@@ -28,3 +28,18 @@ applications under HardCore management like so, in your sys.config file:
 
     {hardcore, [{apps, [YourApp]}]},
 
+Callbacks
+---------
+
+When an application stops or starts, we need to be able to act on
+that.  By default, the hardcore_backoff_server module handles restarts
+with an exponential backoff strategy.  Using the callback argument to
+hardcore:start, it's possible to pass in a tuple like
+
+    {hardcore_backoff_server, state_change, []}
+
+With a module, function, and optional arguments.  When the state
+changes to one of `stopped` or `started`, the function is called like so:
+
+    Module:Function(stopped | started, AppName, Args)
+
