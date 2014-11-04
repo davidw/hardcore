@@ -16,7 +16,7 @@
 %%%===================================================================
 
 start(AppName) ->
-    start(AppName, {hardcore_backoff_server, app_stop, []}).
+    start(AppName, {hardcore_backoff_server, state_change, []}).
 
 start(AppName, Callback) ->
     gen_server:call(hardcore_server, {start, AppName, Callback}).

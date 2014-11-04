@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-          stop_callbacks::list(),
+          callbacks::list(),
           managed_apps::sets:set(),
           running_apps::sets:set()
          }).
@@ -68,7 +68,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     gen_server:cast(?SERVER, add_handler),
-    {ok, #state{stop_callbacks = [],
+    {ok, #state{callbacks = [],
                 managed_apps = sets:new(),
                 running_apps = sets:new()}}.
 
@@ -86,13 +86,13 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({start, AppName, StopCallback}, From, State) ->
+handle_call({start, AppName, Callback}, From, State) ->
     %% Don't actually start it: we first want to register it as
     %% something to listen in on, in case it crashes right away.
     gen_server:cast(?SERVER, {start_application, AppName, From}),
-    NewStopCallbacks = proplists:delete(AppName, State#state.stop_callbacks) ++
-        [{AppName, StopCallback}],
-    {noreply, add_app_managed(AppName, State#state{stop_callbacks = NewStopCallbacks})};
+    NewCallbacks = proplists:delete(AppName, State#state.callbacks) ++
+        [{AppName, Callback}],
+    {noreply, add_app_managed(AppName, State#state{callbacks = NewCallbacks})};
 
 %% Stop it and stop listening in on it.
 handle_call({stop, AppName}, _From, State) ->
@@ -104,17 +104,17 @@ handle_call({stop, AppName}, _From, State) ->
     {reply, {Res, result_proplist(NewState)}, NewState};
 
 %% In this case it's already running or we return an error.
-handle_call({manage, AppName, StopCallback}, _From, State) ->
+handle_call({manage, AppName, Callback}, _From, State) ->
     case lists:keyfind(AppName, 1, application:which_applications()) of
         false ->
             {reply, {error, not_running, AppName}, State};
         _ ->
-            NewStopCallbacks = proplists:delete(AppName, State#state.stop_callbacks) ++
-                [{AppName, StopCallback}],
+            NewCallbacks = proplists:delete(AppName, State#state.callbacks) ++
+                [{AppName, Callback}],
             NewState = apply_funs_to_state(AppName, State,
                                            [fun add_app_running/2,
                                             fun add_app_managed/2]),
-            {reply, result_proplist(State), NewState#state{stop_callbacks = NewStopCallbacks}}
+            {reply, result_proplist(State), NewState#state{callbacks = NewCallbacks}}
     end;
 
 handle_call(running, _From, State) ->
@@ -152,6 +152,8 @@ handle_cast({start_application, AppName, From}, State) ->
 handle_cast({app_started, AppName}, State) ->
     case sets:is_element(AppName, State#state.managed_apps) of
         true ->
+            {M, F, A} = proplists:get_value(AppName, State#state.callbacks),
+            catch(M:F(started, AppName, A)),
             {noreply, add_app_running(AppName, State)};
         _ ->
             {noreply, State}
@@ -162,8 +164,8 @@ handle_cast({app_started, AppName}, State) ->
 handle_cast({app_stopped, AppName, _Reason}, State) ->
     case sets:is_element(AppName, State#state.managed_apps) of
         true ->
-            {M, F, A} = proplists:get_value(AppName, State#state.stop_callbacks),
-            catch(M:F([AppName] ++ A)),
+            {M, F, A} = proplists:get_value(AppName, State#state.callbacks),
+            catch(M:F(stopped, AppName, A)),
             {noreply, remove_app_running(AppName, State)};
         _ ->
             {noreply, State}

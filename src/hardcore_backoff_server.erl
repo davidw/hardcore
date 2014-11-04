@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, app_stop/1]).
+-export([start_link/0, state_change/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,8 +37,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-app_stop([AppName]) ->
-    gen_server:cast(?SERVER, {app_stop, AppName}).
+state_change(NewState, AppName, _Args) ->
+    gen_server:cast(?SERVER, {state_change, NewState, AppName}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -90,7 +90,17 @@ handle_cast({restart, AppName}, State) ->
     hardcore:start(AppName),
     {noreply, State};
 
-handle_cast({app_stop, AppName}, State) ->
+handle_cast({state_change, started, AppName}, State) ->
+    %% The application has started.  Remove any value associated with
+    %% it in the wait time list.  FIXME: This could be problematic for
+    %% an application that does manage to start, but dies immediately
+    %% afterwards.
+    {noreply,
+     State#state{restart_waits =
+                     proplists:delete(AppName,
+                                      State#state.restart_waits)}};
+
+handle_cast({state_change, stopped, AppName}, State) ->
     case proplists:get_value(AppName, State#state.restart_waits) of
         undefined ->
             RestartIn = 1,
