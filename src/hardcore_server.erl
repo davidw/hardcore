@@ -139,7 +139,7 @@ handle_cast(add_handler, State) ->
 
 handle_cast({start_application, AppName, From}, State) ->
     case application:ensure_all_started(AppName, temporary) of
-        ok ->
+        {ok, _Started} ->
             gen_server:reply(From, {ok, result_proplist(State)}),
             {noreply, State};
         Err ->

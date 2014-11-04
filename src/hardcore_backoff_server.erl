@@ -21,7 +21,8 @@
 
 -define(MAX_RESTART_SECONDS, 100).
 
--record(state, {restart_waits::list()}).
+-record(state, {restart_waits::list(),
+                last_stop_times::list()}).
 
 %%%===================================================================
 %%% API
@@ -55,7 +56,7 @@ state_change(NewState, AppName, _Args) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{restart_waits = []}}.
+    {ok, #state{restart_waits = [], last_stop_times = []}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -92,13 +93,25 @@ handle_cast({restart, AppName}, State) ->
 
 handle_cast({state_change, started, AppName}, State) ->
     %% The application has started.  Remove any value associated with
-    %% it in the wait time list.  FIXME: This could be problematic for
-    %% an application that does manage to start, but dies immediately
-    %% afterwards.
+    %% it in the wait time list.
+
+    LastStop = proplists:get_value(AppName, State#state.last_stop_times, {0, 0, 0}),
+    LastWait = proplists:get_value(AppName, State#state.restart_waits, 0),
+
+    case (timer:now_diff(erlang:now(), LastStop) / 1000000) > LastWait of
+        true ->
+            NewRestartWaits = proplists:delete(AppName,
+                                               State#state.restart_waits),
+            NewStopTimes = proplists:delete(AppName,
+                                            State#state.last_stop_times);
+        _ ->
+            NewRestartWaits = State#state.restart_waits,
+            NewStopTimes = State#state.last_stop_times
+    end,
+
     {noreply,
-     State#state{restart_waits =
-                     proplists:delete(AppName,
-                                      State#state.restart_waits)}};
+     State#state{restart_waits = NewRestartWaits,
+                 last_stop_times = NewStopTimes}};
 
 handle_cast({state_change, stopped, AppName}, State) ->
     case proplists:get_value(AppName, State#state.restart_waits) of
@@ -113,8 +126,13 @@ handle_cast({state_change, stopped, AppName}, State) ->
         timer:apply_after(RestartTime * 1000,
                           gen_server, cast,
                           [?SERVER, {restart, AppName}]),
-    NewRestartWaits = proplists:delete(AppName, State#state.restart_waits) ++ [{AppName, RestartIn}],
-    {noreply, State#state{restart_waits = NewRestartWaits}}.
+    NewRestartWaits =
+        proplists:delete(AppName, State#state.restart_waits) ++
+        [{AppName, RestartIn}],
+    NewStopTimes =
+        proplists:delete(AppName, State#state.last_stop_times) ++
+        [{AppName, erlang:now()}],
+    {noreply, State#state{restart_waits = NewRestartWaits, last_stop_times = NewStopTimes}}.
 
 %%--------------------------------------------------------------------
 %% @private
