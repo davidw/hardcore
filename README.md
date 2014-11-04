@@ -26,7 +26,8 @@ If you're working with a release, you'd want to start some
 applications under HardCore management like so, in your sys.config file:
 
 
-    {hardcore, [{apps, [YourApp]}]},
+    {hardcore, [{apps, [YourApp,
+                        {AnotherApp, {Module, Function, []}}]}]},
 
 Callbacks
 ---------
@@ -43,3 +44,5 @@ changes to one of `stopped` or `started`, the function is called like so:
 
     Module:Function(stopped | started, AppName, Args)
 
+As in the example above, the callback can also be passed in as part of
+the config file.
