@@ -93,7 +93,7 @@ handle_event({info_report, _Pid1, {_Pid2, std_info,
     {ok, State};
 
 handle_event(Event, State) ->
-    lager:info("hardcore_events unhandled: ~p", [Event]),
+    %% lager:info("hardcore_events unhandled: ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------
