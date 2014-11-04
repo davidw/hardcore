@@ -12,7 +12,11 @@
 start(_StartType, _StartArgs) ->
     Res = hardcore_sup:start_link(),
     {ok, StartApps} = application:get_env(hardcore, apps),
-    [hardcore:start(App) || App <- StartApps],
+    lists:map(fun({App, Callback}) ->
+                      hardcore:start(App, Callback);
+                 (App) ->
+                      hardcore:start(App)
+              end, StartApps),
     Res.
 
 stop(_State) ->
