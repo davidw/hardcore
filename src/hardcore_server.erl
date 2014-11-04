@@ -67,7 +67,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{managed_apps = sets:new(),
+    gen_server:cast(?SERVER, add_handler),
+    {ok, #state{stop_callbacks = [],
+                managed_apps = sets:new(),
                 running_apps = sets:new()}}.
 
 %%--------------------------------------------------------------------
@@ -131,6 +133,10 @@ handle_call(managed, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+handle_cast(add_handler, State) ->
+    ok = error_logger:add_report_handler(hardcore_events),
+    {noreply, State};
+
 handle_cast({start_application, AppName, From}, State) ->
     case application:ensure_all_started(AppName, temporary) of
         ok ->
@@ -188,6 +194,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
+    error_logger:delete_report_handler(?SERVER),
     ok.
 
 %%--------------------------------------------------------------------

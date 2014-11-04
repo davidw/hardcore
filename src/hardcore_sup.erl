@@ -16,6 +16,8 @@
 %% ===================================================================
 
 start_link() ->
+    %% Remove the error handler if it has been left sitting around:
+    error_logger:delete_report_handler(hardcore_events),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% ===================================================================

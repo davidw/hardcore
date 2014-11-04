@@ -37,7 +37,7 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-app_stop(AppName) ->
+app_stop([AppName]) ->
     gen_server:cast(?SERVER, {app_stop, AppName}).
 %%%===================================================================
 %%% gen_server callbacks
@@ -98,9 +98,11 @@ handle_cast({app_stop, AppName}, State) ->
         RestartTime ->
             RestartIn = lists:min([RestartTime * 2, ?MAX_RESTART_SECONDS])
     end,
-    timer:apply_after(RestartTime * 1000,
-                      gen_server, cast,
-                      [?SERVER, {restart, AppName}]),
+    lager:info("Application stopped: ~p - restarting in ~p seconds", [AppName, RestartIn]),
+    {ok, _Tref} =
+        timer:apply_after(RestartTime * 1000,
+                          gen_server, cast,
+                          [?SERVER, {restart, AppName}]),
     NewRestartWaits = proplists:delete(AppName, State#state.restart_waits) ++ [{AppName, RestartIn}],
     {noreply, State#state{restart_waits = NewRestartWaits}}.
 
