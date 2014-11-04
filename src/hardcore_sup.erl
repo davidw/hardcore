@@ -23,8 +23,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    Events = ?CHILD(hardcore_events, worker),
     Server = ?CHILD(hardcore_server, worker),
     DefaultCallback = ?CHILD(hardcore_backoff_server, worker),
-    {ok, { {one_for_one, 100, 100}, [Server, Events, DefaultCallback]} }.
+    {ok, { {one_for_one, 100, 100}, [Server, DefaultCallback]} }.
 
