@@ -4,9 +4,10 @@ HardCore
 HardCore was created with the idea of creating an Erlang system with a
 'hardened core'.
 
-The problem: you have an Erlang system with multiple applications.
-The system should continue to function and respond to users even if
-some of those applications crash.
+The problem: you have an Erlang system with multiple applications,
+some of which may fail completely.  The system should continue to
+function and respond to users even if some of those applications
+crash.
 
 One way to handle this problem is by means of a "circuit breaker" like
 Fuse: https://github.com/jlouis/fuse
