@@ -58,7 +58,7 @@ add_handler() ->
 %% @spec init(Args) -> {ok, State}
 %% @end
 %%--------------------------------------------------------------------
-init(Args) ->
+init(_Args) ->
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -90,10 +90,6 @@ handle_event({info_report, _Pid1, {_Pid2, std_info,
                                     {type, temporary}]}}, State) ->
     lager:info("hardcore_events application stopped: ~p ~p", [AppName, Reason]),
     hardcore_server:app_stopped(AppName, Reason),
-    {ok, State};
-
-handle_event(Event, State) ->
-    %% lager:info("hardcore_events unhandled: ~p", [Event]),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -103,16 +99,11 @@ handle_event(Event, State) ->
 %% gen_event:call/3,4, this function is called for the specified
 %% event handler to handle the request.
 %%
-%% @spec handle_call(Request, State) ->
-%%                   {ok, Reply, State} |
-%%                   {swap_handler, Reply, Args1, State1, Mod2, Args2} |
-%%                   {remove_handler, Reply}
-%% @end
 %%--------------------------------------------------------------------
 
 handle_call(_Request, State) ->
     Reply = ok,
-    {reply, Reply, State}.
+    {ok, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -121,15 +112,10 @@ handle_call(_Request, State) ->
 %% an event manager receives any other message than an event or a
 %% synchronous request (or a system message).
 %%
-%% @spec handle_info(Info, State) ->
-%%                         {ok, State} |
-%%                         {swap_handler, Args1, State1, Mod2, Args2} |
-%%                         remove_handler
-%% @end
 %%--------------------------------------------------------------------
 
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
