@@ -9,7 +9,7 @@
 -module(hardcore).
 
 %% API
--export([start/1, stop/1, manage/1, running/0, managed/0]).
+-export([start/1, start/2, stop/1, manage/1, running/0, managed/0]).
 
 %%%===================================================================
 %%% API
